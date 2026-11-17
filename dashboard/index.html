@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Token Radar — Valuation Desk: pre-token protocols priced from the comps</title>
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<header class="mast">
+  <div class="mast-in">
+    <div class="brand"><span class="tick">◆</span> TOKEN RADAR <em>valuation desk</em></div>
+    <div class="mast-meta" id="mastMeta">Loading the sealed snapshot…</div>
+  </div>
+  <p class="lede">Which pre-token protocol is worth farming next — priced the way a desk would price it: fitted from the protocols whose tokens already trade, not from a hand-picked list. Every implied value below is the fitted comps model applied to that protocol's own TVL, growth and age. A protocol here <b>records no token</b>; that is what the snapshot says, never proof it has none.</p>
+</header>
+
+<main>
+<section class="hero" id="hero" aria-label="Model summary">
+  <div class="hero-card">
+    <h2>The fitted equation</h2>
+    <p class="eq" id="equation">log10(implied) = a + b·log10(TVL) + …</p>
+    <p class="eq-note" id="eqNote"></p>
+    <dl class="stats" id="heroStats"></dl>
+  </div>
+  <div class="hero-card gold">
+    <h2>How much can you trust it?</h2>
+    <p id="trustLine"></p>
+    <dl class="stats" id="trustStats"></dl>
+    <p class="fine">Out-of-sample numbers are the honest ones: the curve is a central tendency, and individual tokens trade far around it. The walk-forward folds fit on older listings and test on newer ones, so a good in-sample R² cannot hide behind hindsight.</p>
+  </div>
+</section>
+
+<section class="panel" id="curvePanel" aria-label="Size curve">
+  <div class="panel-head"><h2>The size curve</h2><span class="tag">mcap ≈ TVL<sup>β</sup></span></div>
+  <p class="panel-sub">Each dot is a token-bearing comp (actual market cap); the gold curve is the fitted size curve at median growth and no category adjustment. The grey band is ±1 residual SD in log space. Hover a dot for its fitted-vs-actual.</p>
+  <div id="curveWrap"></div>
+  <div class="bins" id="bins"></div>
+</section>
+
+<section class="panel" id="boardPanel" aria-label="Board">
+  <div class="panel-head"><h2>The board — pre-token, ranked by fitted implied value</h2><span class="tag" id="boardCount"></span></div>
+  <div class="tabs" role="tablist">
+    <button class="tab on" data-tab="board" role="tab">Pre-token board</button>
+    <button class="tab" data-tab="live" role="tab">Live token — the comps</button>
+    <button class="tab" data-tab="model" role="tab">Model &amp; calibration</button>
+  </div>
+  <div class="controls" id="controls">
+    <input id="q" type="search" placeholder="Search name or slug…" aria-label="Search">
+    <select id="cat" aria-label="Category"><option value="">All categories</option></select>
+    <select id="chain" aria-label="Chain"><option value="">All chains</option></select>
+    <label class="chk"><input id="watchOnly" type="checkbox"> Watchlist only</label>
+    <select id="sort" aria-label="Sort by">
+      <option value="value">Sort: implied value ↓</option>
+      <option value="tvl">Sort: TVL ↓</option>
+      <option value="growth">Sort: 7-day growth ↓</option>
+      <option value="age">Sort: age ↓</option>
+      <option value="ratio">Sort: implied / TVL ↓</option>
+      <option value="name">Sort: name A–Z</option>
+    </select>
+    <button id="csv" type="button">Export CSV</button>
+  </div>
+  <div id="tabBoard">
+    <table class="board">
+      <thead><tr><th>#</th><th>Protocol</th><th>Category</th><th>Chains</th><th class="num">TVL</th><th class="num">7d</th><th class="num">Age</th><th class="num">Implied value</th><th class="num">Impl / TVL</th></tr></thead>
+      <tbody id="rows"></tbody>
+    </table>
+    <p class="fine" id="boardNote"></p>
+  </div>
+  <div id="tabLive" hidden>
+    <p class="panel-sub">These already trade. They are <b>not</b> board rows: they are the market the model was fitted on, shown at their real market caps so the reader can check the fit against reality.</p>
+    <table class="board">
+      <thead><tr><th>Protocol</th><th>Category</th><th class="num">TVL</th><th class="num">Market cap</th><th class="num">mcap / TVL</th><th class="num">7d</th></tr></thead>
+      <tbody id="liveRows"></tbody>
+    </table>
+  </div>
+  <div id="tabModel" hidden>
+    <h3>Walk-forward validation</h3>
+    <p class="panel-sub">Fitted on older listings, tested on newer ones. R² out-of-sample is computed in log10 space; MAPE (log) is the mean absolute log error in dex; MAPE (level) is the mean absolute error on dollars, in per cent — it is dominated by a few 10–100× misses, so the median level error is shown beside it as the typical miss.</p>
+    <table class="board"><thead><tr><th>Fold</th><th class="num">Train</th><th class="num">Test</th><th class="num">R² OOS</th><th class="num">MAPE log</th><th class="num">MAPE level</th><th class="num">Median level</th></tr></thead><tbody id="wfRows"></tbody></table>
+    <h3>Fitted vs actual — all comps</h3>
+    <p class="panel-sub">Every protocol the model was fitted on, with what the curve says it should be worth and what the market says it is worth. Sorted by largest absolute log error first, so the misses are on top.</p>
+    <table class="board"><thead><tr><th>Protocol</th><th>Category</th><th class="num">TVL</th><th class="num">Actual mcap</th><th class="num">Fitted mcap</th><th class="num">Log error</th></tr></thead><tbody id="compRows"></tbody></table>
+    <h3>Worked example — recompute it yourself</h3>
+    <p class="panel-sub" id="worked"></p>
+    <p class="fine">Method, in full: OLS on log10(market cap) against log10(TVL), clamped 7-day growth and a category adjustment (only categories with ≥5 comps get their own; the rest use the global intercept), fitted on the snapshot's token-bearing comps; the age term is a second-stage fit of the residuals on centred log10(age in years + 1) over the comps that carry a listed date. No protocol name is ever special-cased. The same valuation function prices the board and this page's detail drawer.</p>
+  </div>
+</section>
+</main>
+
+<aside class="drawer" id="drawer" aria-label="Protocol detail" hidden>
+  <button class="drawer-x" id="drawerClose" type="button">Close ✕</button>
+  <div id="drawerBody"></div>
+</aside>
+
+<footer class="foot">
+  <p id="footNote"></p>
+  <p class="fine">Implied value is this entry's own claim from the sealed snapshot, never a prediction that a token will be issued or what it will trade at. Built for the make.fun token-radar-01 bounty; source: main.ts + lib/model.ts, fitted at run time.</p>
+</footer>
+<script src="../data.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
